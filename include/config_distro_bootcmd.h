@@ -190,6 +190,7 @@
 	\
 	"nvme_boot=" \
 		BOOTENV_RUN_PCI_ENUM \
+		BOOTENV_RUN_DCACHE_OFF \
 		BOOTENV_RUN_NVME_INIT \
 		BOOTENV_SHARED_BLKDEV_BODY(nvme)
 #define BOOTENV_DEV_NVME	BOOTENV_DEV_BLKDEV
@@ -254,6 +255,15 @@
 	BOOT_TARGET_DEVICES_references_IDE_without_CONFIG_IDE
 #endif
 
+#ifdef CONFIG_CMD_CACHE
+#define BOOTENV_RUN_DCACHE_OFF "run boot_dcache_off; "
+#define BOOTENV_SHARED_DCACHE \
+	"boot_dcache_off=dcache off\0"
+#else
+#define BOOTENV_RUN_DCACHE_OFF
+#define BOOTENV_SHARED_DCACHE
+#endif
+
 #if defined(CONFIG_DM_PCI)
 #define BOOTENV_RUN_PCI_ENUM "run boot_pci_enum; "
 #define BOOTENV_SHARED_PCI \
@@ -268,6 +278,7 @@
 #define BOOTENV_SHARED_USB \
 	"boot_net_usb_start=usb start\0" \
 	"usb_boot=" \
+		BOOTENV_RUN_PCI_ENUM \
 		"usb start; " \
 		BOOTENV_SHARED_BLKDEV_BODY(usb)
 #define BOOTENV_DEV_USB		BOOTENV_DEV_BLKDEV
@@ -412,6 +423,7 @@
 	BOOTENV_SHARED_USB \
 	BOOTENV_SHARED_SATA \
 	BOOTENV_SHARED_SCSI \
+	BOOTENV_SHARED_DCACHE \
 	BOOTENV_SHARED_NVME \
 	BOOTENV_SHARED_IDE \
 	BOOTENV_SHARED_UBIFS \
