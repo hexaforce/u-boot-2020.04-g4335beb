@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0+
 /*
- * Copyright (c) 2016-2018, NVIDIA CORPORATION.
+ * Copyright (c) 2016-2021, NVIDIA CORPORATION.
  */
 
 #include <common.h>
@@ -460,10 +460,18 @@ static int set_fdt_addr(void)
 	ret = env_set_hex("fdt_addr", cboot_boot_x0);
 	if (ret) {
 		printf("Failed to set fdt_addr to point at DTB: %d\n", ret);
-		return ret;
+		goto fail;
 	}
 
-	return 0;
+	ret = env_set_hex("fdt_copy_src_addr", cboot_boot_x0);
+	if (ret) {
+		printf("Failed to set fdt_copy_src_addr to point at DTB: %d\n",
+			ret);
+		goto fail;
+	}
+	ret = 0;
+fail:
+	return ret;
 }
 
 /*
@@ -588,6 +596,139 @@ static char *cboot_get_bootargs(const void *fdt)
 	return strip(args);
 }
 
+#if defined(CONFIG_TEGRA210)
+static enum env_location parse_env_drv_from_ids(const void *fdt, int offset)
+{
+	const struct fdt_property *prop = NULL;
+	const char *name;
+	int i;
+	static const struct env_drv {
+		const char *name; /* IDs */
+		enum env_location loc; /* Env driver need to skip */
+	} env_drv[] = {
+		{"3448-0000", ENVL_MMC},
+		{"3448-0002", ENVL_SPI_FLASH}
+	};
+
+	prop = fdt_get_property_by_offset(fdt, offset, NULL);
+	if (!prop)
+		goto out;
+
+	name = fdt_get_string(fdt, fdt32_to_cpu(prop->nameoff), NULL);
+	if (!name)
+		goto out;
+
+	for (i = 0; i < sizeof(env_drv) / sizeof(struct env_drv); i++) {
+		if (!strncmp(name, env_drv[i].name, 9))
+			return env_drv[i].loc;
+	}
+
+out:
+	return ENVL_UNKNOWN;
+}
+
+static struct env_driver *cboot_env_driver_lookup(enum env_location loc)
+{
+	struct env_driver *drv;
+	const int n_ents = ll_entry_count(struct env_driver, env_driver);
+	struct env_driver *entry;
+
+	drv = ll_entry_start(struct env_driver, env_driver);
+	for (entry = drv; entry != drv + n_ents; entry++) {
+		if (loc == entry->location)
+			return entry;
+	}
+
+	/* Not found */
+	return NULL;
+}
+
+/*
+ * If current board is Nano eMMC board, set QSPI driver load function
+ * to NULL, env_load() function will skip trying to load env from QSPI;
+ * if current board is Nano QSPI+SD board, set eMMC driver load function
+ * to NULL, env_load() function will skip trying to load env from eMMC.
+ */
+void tegra210_env_drv_config(void)
+{
+	struct env_driver *drv = NULL;
+	int offset_node;
+	int offset_first, offset_next;
+	int i;
+	enum env_location loc = ENVL_UNKNOWN;
+	const void *fdt = (const void *)cboot_boot_x0;
+
+	offset_node = fdt_path_offset(fdt, "/chosen/plugin-manager/ids");
+	if (offset_node < 0) {
+		printf("%s: find node offset error %d\n",
+		       __func__, offset_node);
+		goto out;
+	}
+
+	offset_first = fdt_first_property_offset(fdt, offset_node);
+	if (offset_first < 0) {
+		printf("%s: find priority offset error %d\n",
+		       __func__, offset_first);
+		goto out;
+	}
+
+	loc = parse_env_drv_from_ids(fdt, offset_first);
+	if (loc != ENVL_UNKNOWN)
+		goto out;
+
+	for (i = 1; ; i++) {
+		offset_next = fdt_next_property_offset(fdt, offset_first);
+		if (offset_next > 0) {
+			offset_first = offset_next;
+			loc = parse_env_drv_from_ids(fdt, offset_next);
+			if (loc != ENVL_UNKNOWN)
+				break;
+		} else {
+			/* Failed to find properties */
+			break;
+		}
+	}
+
+out:
+	drv = cboot_env_driver_lookup(loc);
+	if (drv)
+		drv->load = NULL;
+}
+
+#if defined(CBOOT_RP4_LOAD)
+int cboot_get_xusb_fw_addr(void)
+{
+	int node, len, err;
+	const u32 *prop;
+	u32 fw_addr;
+	void *fdt;
+
+	fdt = (void *)env_get_hex("fdt_addr_r", cboot_boot_x0);
+
+	node = fdt_path_offset(fdt, "/xusb");
+	if (node < 0) {
+		printf("xusb node NOT found!");
+		err = -ENOENT;
+		goto out;
+	}
+
+	prop = fdt_getprop(fdt, node, "nvidia,xusb-firmware-load-addr", &len);
+	if (!prop) {
+		printf("xusb property NOT found!\n");
+		err = -ENOENT;
+		goto out;
+	}
+
+	fw_addr = be32_to_cpu(*prop);
+	debug("XUSB FW address = %X\n", fw_addr);
+	err = env_set_hex("xusb_fw_addr", fw_addr);
+
+out:
+	return err;
+}
+#endif	/* CBOOT_RP4_LOAD */
+#endif	/* T210 */
+
 int cboot_late_init(void)
 {
 	const void *fdt = (const void *)cboot_boot_x0;
@@ -618,5 +759,11 @@ int cboot_late_init(void)
 		free(bootargs);
 	}
 
+#if defined(CBOOT_RP4_LOAD)
+	/* T210 XUSB ONLY: get XUSB FW load address from CBoot */
+	if (cboot_get_xusb_fw_addr())
+		printf("%s: Failed to get XUSB FW address! err: %d\n",
+		       __func__, err);
+#endif
 	return 0;
 }

@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0+ */
 /*
- * (C) Copyright 2013-2015
+ * (C) Copyright 2013-2021
  * NVIDIA Corporation <www.nvidia.com>
  */
 
@@ -38,16 +38,46 @@
  * fdt_addr_r simply shouldn't overlap anything else. Choosing 32M allows for
  *   the compressed kernel to be up to 16M too.
  *
+ * fdtoverlay_addr_r is used for DTB overlays from extlinux.conf. It's placed
+ *   just above pxefile_addr_r.
+ *
  * ramdisk_addr_r simply shouldn't overlap anything else. Choosing 33M allows
  *   for the FDT/DTB to be up to 1M, which is hopefully plenty.
  */
-#define CONFIG_LOADADDR 0x80080000
+/*
+ * NOTE: fdt_addr (from CBoot) is @ 0x83100000. fdt_addr_r is also from CBoot
+ * and can't be moved. To accomodate a 128MB kernel (for gcov, trace, debug,
+ * etc.), kernel_addr_r is moved to 0x84000000, above fdt/ramdisk and below
+ * pxe/script addresses.
+ */
+#define CONFIG_LOADADDR 0x84000000
 #define MEM_LAYOUT_ENV_SETTINGS \
 	"scriptaddr=0x90000000\0" \
 	"pxefile_addr_r=0x90100000\0" \
+	"fdtoverlay_addr_r=0x90200000\0" \
 	"kernel_addr_r=" __stringify(CONFIG_LOADADDR) "\0" \
 	"fdt_addr_r=0x83000000\0" \
-	"ramdisk_addr_r=0x83200000\0"
+	"ramdisk_addr_r=0x83200000\0" \
+	"fdt_copy_node_paths=" \
+		"/chosen/plugin-manager:" \
+		"/chosen/reset:" \
+		"/chosen/display-board:" \
+		"/chosen/proc-board:" \
+		"/chosen/pmu-board:" \
+		"/external-memory-controller@7001b000:" \
+		"/memory@80000000\0" \
+	"fdt_copy_prop_paths=" \
+		"/bpmp/carveout-start:" \
+		"/bpmp/carveout-size:" \
+		"/chosen/eks_info:" \
+		"/chosen/nvidia,bluetooth-mac:" \
+		"/chosen/nvidia,ethernet-mac:" \
+		"/chosen/nvidia,wifi-mac:" \
+		"/chosen/uuid:" \
+		"/chosen/linux,initrd-start:" \
+		"/chosen/linux,initrd-end:" \
+		"/serial-number:" \
+		"/psci/nvidia,system-lp0-disable\0"
 
 /* For USB EHCI controller */
 #define CONFIG_EHCI_IS_TDI

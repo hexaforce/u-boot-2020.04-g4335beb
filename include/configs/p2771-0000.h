@@ -17,12 +17,21 @@
 #define CONFIG_SYS_MMC_ENV_DEV		0
 #define CONFIG_SYS_MMC_ENV_PART		2
 
+/* SD, eMMC, USB, NVME, PXE, DHCP */
+#define BOOT_TARGET_DEVICES(func) \
+	func(MMC, mmc, 1) \
+	func(MMC, mmc, 0) \
+	func(USB, usb, 0) \
+	func(NVME, nvme, 0) \
+	func(PXE, pxe, na) \
+	func(DHCP, dhcp, na)
+
 #define BOARD_EXTRA_ENV_SETTINGS \
 	"calculated_vars=kernel_addr_r fdt_addr_r scriptaddr pxefile_addr_r " \
 		"ramdisk_addr_r\0" \
 	"kernel_addr_r_align=00200000\0" \
 	"kernel_addr_r_offset=00080000\0" \
-	"kernel_addr_r_size=02000000\0" \
+	"kernel_addr_r_size=08000000\0" \
 	"kernel_addr_r_aliases=loadaddr\0" \
 	"fdt_addr_r_align=00200000\0" \
 	"fdt_addr_r_offset=00000000\0" \
